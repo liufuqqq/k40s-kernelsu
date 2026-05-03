@@ -219,16 +219,18 @@ jobs:
         cp ../kernelsu-source/kernel/selinux/*.h drivers/kernelsu/selinux/
         cp -r ../kernelsu-source/kernel/include drivers/kernelsu/
         # Create a clean Makefile with obj-y (always-on, no git detection)
-        cat > drivers/kernelsu/Makefile << 'KSUMAKEFILE'
-obj-y := ksu.o allowlist.o apk_sign.o sucompat.o throne_tracker.o core_hook.o ksud.o embed_ksud.o kernel_compat.o
-obj-y += selinux/selinux.o selinux/sepolicy.o selinux/rules.o
-ccflags-y += -I$(srctree)/security/selinux -I$(srctree)/security/selinux/include
-ccflags-y += -I$(objtree)/security/selinux -include $(srctree)/include/uapi/asm-generic/errno.h
-ccflags-y += -I$(srctree)/drivers/kernelsu/include
-ccflags-y += -DKSU_VERSION=10200
-ccflags-y += -Wno-implicit-function-declaration -Wno-strict-prototypes -Wno-int-conversion -Wno-gcc-compat
-ccflags-y += -Wno-declaration-after-statement -Wno-unused-function
-KSUMAKEFILE
+        rm -f drivers/kernelsu/Makefile
+        for _ksu_makefile_line in \
+            'obj-y := ksu.o allowlist.o apk_sign.o sucompat.o throne_tracker.o core_hook.o ksud.o embed_ksud.o kernel_compat.o' \
+            'obj-y += selinux/selinux.o selinux/sepolicy.o selinux/rules.o' \
+            'ccflags-y += -I$(srctree)/security/selinux -I$(srctree)/security/selinux/include' \
+            'ccflags-y += -I$(objtree)/security/selinux -include $(srctree)/include/uapi/asm-generic/errno.h' \
+            'ccflags-y += -I$(srctree)/drivers/kernelsu/include' \
+            'ccflags-y += -DKSU_VERSION=10200' \
+            'ccflags-y += -Wno-implicit-function-declaration -Wno-strict-prototypes -Wno-int-conversion -Wno-gcc-compat' \
+            'ccflags-y += -Wno-declaration-after-statement -Wno-unused-function'; do \
+          echo "$_ksu_makefile_line" >> drivers/kernelsu/Makefile; \
+        done
         # Add to drivers/Makefile (use obj-y to guarantee compilation)
         if ! grep -q "kernelsu" drivers/Makefile; then
             echo 'obj-y += kernelsu/' >> drivers/Makefile

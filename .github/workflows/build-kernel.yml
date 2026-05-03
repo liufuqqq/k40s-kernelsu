@@ -202,10 +202,33 @@ jobs:
     - name: Setup KernelSU
       if: env.ENABLE_KERNELSU == 'true'
       run: |
-        cd $GITHUB_WORKSPACE/kernel_workspace/android-kernel
-        curl -LSs "https://raw.githubusercontent.com/tiann/KernelSU/v0.9.5/kernel/setup.sh" | bash -s ${{ env.KERNELSU_TAG }}
-        KSU_VERSION=$(cd KernelSU && expr $(/usr/bin/git rev-list --count HEAD) + 10200)
-        echo "UPLOADNAME=-KernelSU_$KSU_VERSION" >> $GITHUB_ENV
+        cd $GITHUB_WORKSPACE/kernel_workspace
+        # Download KernelSU v0.9.5 source directly (setup.sh git clone may fail)
+        KSU_TAG=${{ env.KERNELSU_TAG }}
+        [ -z "$KSU_TAG" ] && KSU_TAG="v0.9.5"
+        wget -O kernelsu-source.tar.gz "https://github.com/tiann/KernelSU/archive/refs/tags/${KSU_TAG}.tar.gz"
+        mkdir -p kernelsu-source
+        tar -C kernelsu-source -zxvf kernelsu-source.tar.gz --strip-components=1 2>&1 | tail -3
+        # Copy kernel module source into kernel tree
+        cd android-kernel
+        rm -rf KernelSU
+        mkdir -p KernelSU
+        cp -r ../kernelsu-source/kernel/* KernelSU/
+        # Create symlink drivers/kernelsu -> KernelSU/kernel
+        ln -sf "$(pwd)/KernelSU" "drivers/kernelsu"
+        # Add to drivers/Makefile
+        if ! grep -q "kernelsu" drivers/Makefile; then
+            echo 'obj-$(CONFIG_KSU) += kernelsu/' >> drivers/Makefile
+        fi
+        # Add to drivers/Kconfig before endmenu
+        if ! grep -q "kernelsu/Kconfig" drivers/Kconfig; then
+            sed -i '/^endmenu$/i\source "drivers/kernelsu/Kconfig"' drivers/Kconfig
+        fi
+        # Verify setup
+        echo "=== KernelSU Setup Verification ==="
+        ls -la drivers/kernelsu/
+        echo "KSU_VERSION=$(expr $(cd ../kernelsu-source && git rev-list --count HEAD 2>/dev/null || echo 0) + 10200)" >> $GITHUB_ENV
+        echo "UPLOADNAME=-KernelSU_$(expr $(cd ../kernelsu-source && git rev-list --count HEAD 2>/dev/null || echo 11872) + 10200)" >> $GITHUB_ENV
 
     - name: Setup Configuration for Kernel
       run: |

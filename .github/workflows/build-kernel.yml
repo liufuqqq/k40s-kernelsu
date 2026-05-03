@@ -199,16 +199,6 @@ jobs:
             echo "HAVE_SOURCE_BOOT_IMAGE=true" >> $GITHUB_ENV
         fi
 
-    - name: Use MIUI stock config
-      run: |
-        cd $GITHUB_WORKSPACE/kernel_workspace/android-kernel
-        if [ -f arch/${{ env.ARCH }}/configs/munch_stock-defconfig ]; then
-          cp arch/${{ env.ARCH }}/configs/munch_stock-defconfig arch/${{ env.ARCH }}/configs/${{ env.KERNEL_CONFIG }}
-          echo "Copied munch_stock-defconfig over ${{ env.KERNEL_CONFIG }}"
-        else
-          echo "munch_stock-defconfig not found, using ${{ env.KERNEL_CONFIG }} as-is"
-        fi
-
     - name: Setup KernelSU
       if: env.ENABLE_KERNELSU == 'true'
       run: |

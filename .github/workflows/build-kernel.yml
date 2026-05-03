@@ -203,32 +203,46 @@ jobs:
       if: env.ENABLE_KERNELSU == 'true'
       run: |
         cd $GITHUB_WORKSPACE/kernel_workspace
-        # Download KernelSU v0.9.5 source directly (setup.sh git clone may fail)
+        # Download KernelSU v0.9.5 source directly
         KSU_TAG=${{ env.KERNELSU_TAG }}
         [ -z "$KSU_TAG" ] && KSU_TAG="v0.9.5"
         wget -O kernelsu-source.tar.gz "https://github.com/tiann/KernelSU/archive/refs/tags/${KSU_TAG}.tar.gz"
         mkdir -p kernelsu-source
         tar -C kernelsu-source -zxvf kernelsu-source.tar.gz --strip-components=1 2>&1 | tail -3
-        # Copy kernel module source into kernel tree
+        # Copy KSU kernel source directly into kernel tree (no symlink, avoids kbuild issues)
         cd android-kernel
-        rm -rf KernelSU
-        mkdir -p KernelSU
-        cp -r ../kernelsu-source/kernel/* KernelSU/
-        # Create symlink drivers/kernelsu -> KernelSU/kernel
-        ln -sf "$(pwd)/KernelSU" "drivers/kernelsu"
-        # Add to drivers/Makefile
+        rm -rf drivers/kernelsu
+        mkdir -p drivers/kernelsu/selinux
+        cp ../kernelsu-source/kernel/*.c drivers/kernelsu/
+        cp ../kernelsu-source/kernel/*.h drivers/kernelsu/
+        cp ../kernelsu-source/kernel/selinux/*.c drivers/kernelsu/selinux/
+        cp ../kernelsu-source/kernel/selinux/*.h drivers/kernelsu/selinux/
+        cp -r ../kernelsu-source/kernel/include drivers/kernelsu/
+        # Create a clean Makefile with obj-y (always-on, no git detection)
+        cat > drivers/kernelsu/Makefile << 'KSUMAKEFILE'
+obj-y := ksu.o allowlist.o apk_sign.o sucompat.o throne_tracker.o core_hook.o ksud.o embed_ksud.o kernel_compat.o
+obj-y += selinux/selinux.o selinux/sepolicy.o selinux/rules.o
+ccflags-y += -I$(srctree)/security/selinux -I$(srctree)/security/selinux/include
+ccflags-y += -I$(objtree)/security/selinux -include $(srctree)/include/uapi/asm-generic/errno.h
+ccflags-y += -I$(srctree)/drivers/kernelsu/include
+ccflags-y += -DKSU_VERSION=10200
+ccflags-y += -Wno-implicit-function-declaration -Wno-strict-prototypes -Wno-int-conversion -Wno-gcc-compat
+ccflags-y += -Wno-declaration-after-statement -Wno-unused-function
+KSUMAKEFILE
+        # Add to drivers/Makefile (use obj-y to guarantee compilation)
         if ! grep -q "kernelsu" drivers/Makefile; then
-            echo 'obj-$(CONFIG_KSU) += kernelsu/' >> drivers/Makefile
+            echo 'obj-y += kernelsu/' >> drivers/Makefile
         fi
-        # Add to drivers/Kconfig before endmenu
+        # Add to drivers/Kconfig for CONFIG_KSU definition
+        cp ../kernelsu-source/kernel/Kconfig drivers/kernelsu/Kconfig
         if ! grep -q "kernelsu/Kconfig" drivers/Kconfig; then
             sed -i '/^endmenu$/i\source "drivers/kernelsu/Kconfig"' drivers/Kconfig
         fi
-        # Verify setup
-        echo "=== KernelSU Setup Verification ==="
-        ls -la drivers/kernelsu/
-        echo "KSU_VERSION=$(expr $(cd ../kernelsu-source && git rev-list --count HEAD 2>/dev/null || echo 0) + 10200)" >> $GITHUB_ENV
-        echo "UPLOADNAME=-KernelSU_$(expr $(cd ../kernelsu-source && git rev-list --count HEAD 2>/dev/null || echo 11872) + 10200)" >> $GITHUB_ENV
+        # Verify
+        echo "=== KernelSU Setup ==="
+        ls drivers/kernelsu/*.c
+        echo "KSU_VERSION=10200" >> $GITHUB_ENV
+        echo "UPLOADNAME=-KernelSU_10200" >> $GITHUB_ENV
 
     - name: Setup Configuration for Kernel
       run: |
